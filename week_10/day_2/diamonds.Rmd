@@ -1,0 +1,116 @@
+---
+title: "Homework - features and elements of multiple regression"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    css: ../../styles.css
+  pdf_document: default
+---
+
+```{r include = F}
+library(tidyverse)
+library(GGally)
+library(ggfortify)
+```
+
+```{r include = F}
+diamonds <- read_csv("data/diamonds.csv")
+```
+
+```{r}
+summary(diamonds)
+```
+
+Some variables seem to be dependent on others e.g. `carat`, `depth` and `table` to the dimensions x, y, z. Let us use `ggpairs()` to investigate if there are any correlations between a diamond's carat and its dimensions
+
+```{r}
+ggpairs(diamonds)
+```
+The correlation between carat and dimensions is > 0.95 for all dimensions. Dropping the dimensions in preparation to use only `carat` going forward:
+
+```{r}
+diamonds <- diamonds %>% 
+  select(-x, -y, -z)
+```
+
+Let us now possible predictors of `price` in the dataset. From the `ggpairs` we see that it is correlated with `carat`:
+
+```{r}
+diamonds %>%
+  select(price, carat, cut, color, clarity) %>% 
+  ggpairs()
+```
+
+
+```{r}
+diamonds %>% 
+  ggplot(aes(carat, price)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+Looking at `cut`, `color` and `clarity` reveals they have levels: 5, 7 and 8 respectively. One would expect to require 4, 6 and 7 'dummy' variables to account for each level as a Boolean (0 or 1).
+
+```{r}
+unique(diamonds$cut)
+unique(diamonds$color)
+unique(diamonds$clarity)
+```
+
+Creating a linear regression for price and carat:
+
+```{r}
+model <- lm(price ~ carat, diamonds)
+
+summary(model)
+```
+
+```{r}
+autoplot(model)
+```
+
+
+The summary reveals a strong correlation with a p-value <2e-16 and aprox 85% of the variance in price accounted for by carat.
+The diagnostic plots suggest that most of the values are localised below 20,000$, suggesting a skewed distribution.
+
+To investigate how cut affects price, continue by creating dummy columns for cut levels:
+
+```{r}
+d_cut_dummies <- diamonds %>%
+  fastDummies::dummy_cols(select_columns = "cut", remove_first_dummy = TRUE, remove_selected_columns = TRUE) %>% 
+  janitor::clean_names()
+```
+
+```{r}
+summary(lm(price ~ carat + cut_ideal, d_cut_dummies))
+```
+
+```{r}
+mosaic::plotModel(lm(price ~ carat + cut_ideal, d_cut_dummies))
+```
+
+Seems that premium cuts are positively correlated with price. p-value is close to 0. However, cut type only accounts for 0.00916 of the variance in price. Cut type doesn't seem to have nearly as much weight in affecting price. Let us investigate colour, D is considered the best and J the worst:
+
+```{r}
+d_col_dummies <- diamonds %>%
+  fastDummies::dummy_cols(select_columns = "color", remove_selected_columns = TRUE) %>% 
+  janitor::clean_names()
+```
+
+```{r}
+summary(lm(price ~ carat + color_j, d_col_dummies))
+```
+
+Neither of the best (D) and worst (J) colour values contribute much to the model. Finally let us investigate `log(carat)` instead of `carat`, since `price` seems to plateau below the 20,000$.
+
+```{r}
+summary(lm(price ~ log(carat):cut_ideal, d_cut_dummies))
+```
+
+```{r}
+mosaic::plotModel(lm(price ~ log(carat):cut_ideal, d_cut_dummies))
+```
+
