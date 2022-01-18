@@ -1,0 +1,126 @@
+---
+title: "Joins and `tidyr` Homework"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    css: ../../styles.css
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<br>
+
+The data for the joining tasks is from [Kaggle](https://www.kaggle.com/ananta/credit-card-data) and contains synthetic (fake) credit card information and transactions. The data for the `tidyr` tasks is also synthetic.
+
+# MVP
+
+## Joins
+
+<br>
+**Question 1**
+
+Read in all 4 credit card transaction datasets and clean column names.
+```{r}
+library(tidyverse)
+cardbase <- read_csv("data/CardBase.csv") %>% 
+  janitor::clean_names(.)
+
+customerdbase <- read_csv("data/CustomerBase.csv") %>% 
+  janitor::clean_names(.)
+
+fraudbase <- read_csv("data/FraudBase.csv") %>% 
+  janitor::clean_names(.)
+
+transactionbase <- read_csv("data/TransactionBase.csv") %>% 
+  janitor::clean_names(.)
+```
+
+
+**Question 2**
+
+Join the data containing card details and customer details by customer id, so that all records of card details and any matching records in customer details are kept. Before you run the code, think about how many rows you expect to see after joining.
+```{r}
+card_customer <- left_join(cardbase, customerdbase)
+```
+
+
+**Question 3**
+
+Join the data containing fraud details with transaction details so all rows of both tables are kept. What does the resulting row number tell you?
+```{r}
+fraud_transaction <- full_join(fraudbase, transactionbase)
+```
+
+
+**Question 4**
+
+Join the data containing card details with transaction details so rows from the first which have matching ones in the second are returned, but only return rows in the first table once.
+```{r}
+card_transaction <- semi_join(cardbase, transactionbase, by = c("card_number" = "credit_card_id"))
+```
+
+
+## `tidyr`
+
+**Question 5**
+
+Read in `hat_observations` and separate `observation` into two columns, `hat_colour` and `hat_type`.
+```{r}
+hat_obs <- read_csv("data/hat_observations.csv") %>% 
+  janitor::clean_names(.)
+
+separate(hat_obs, col = "observation", into = c("hat_colour", "hat_type"))
+```
+
+
+**Question 6**
+
+Unite `day`, `month`, and `year` columns into a column called `date` using a suitable separator. Then find the date where the most berets were observed.
+```{r}
+separate(hat_obs, col = "observation", into = c("hat_colour", "hat_type"),
+                                                sep = ",") %>%
+  unite(date, c("year", "month", "day"),
+        sep = "-") %>%
+  filter(hat_type == "beret") %>% 
+  slice_max(observation_count,n = 5)
+# No need to group by date since all dates and hat colours are unique
+```
+
+
+
+# Extension
+
+## Joins
+
+**Question 1**
+
+Can you join all 4 datasets together so that you're left with a dataset that looks like below with **109 rows** and **12 columns**?
+
+![](images/all_joined.png)
+```{r}
+cardbase %>% full_join(fraud_transaction, by = c("card_number" = "credit_card_id")) %>%
+  full_join(customerdbase) %>% 
+  filter(!is.na(fraud_flag))
+```
+
+## `tidyr`
+
+**Question 2**
+
+Read in `exam_scores` and transform it into long format with two new columns `exam_question` and `score`. Then, using `separate` and `select`, remove superfluous information from the values in `exam_question`
+```{r}
+scores <- read_csv("data/exam_scores.csv") %>% 
+  janitor::clean_names(.)
+
+scores %>% pivot_longer(cols = starts_with("e"),
+             names_to = "exam_question",
+             values_to = "score",
+             names_prefix = "exam_q")
+```
+

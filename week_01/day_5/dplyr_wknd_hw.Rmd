@@ -1,0 +1,131 @@
+---
+title: "`dplyr` Weekend Homework"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    css: ../../styles.css
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+```
+<br>
+
+
+
+As this is your first weekend homework, here are some tips: 
+
+* Try to schedule some time in your weekend to work on the homework so it's not suddenly Monday morning and you haven't gotten started yet (it happens).
+* Remember that the weekend homework is for your learning, so try to use it as an opportunity to apply and consolidate everything you've learned in the week.
+* Also use it as an opportunity to spend a bit more time making your code readable and reproducible, by practising commenting and writing some text around your steps and findings. You will thank yourself later! 
+  * This will be especially useful for this specific weekend homework as it's very open-ended and you will eventually forget your own thought process
+* A bit obvious, but don't spend your entire weekend working on the homework! Remember to spend time doing things you enjoy and rest up ahead of the following week.
+
+The data for this weekend homework is scraped from Goodreads (a website all about books) and made publicly available on Kaggle. You can read more about the data [here](https://www.kaggle.com/jealousleopard/goodreadsbooks).
+
+# MVP
+
+### First steps
+
+Load necessary packages and read in `books.csv`. Investigate dimensions, variables, missing values - you know the drill!
+
+<br>
+
+11123 rows, 13 columns. First impressions: rowid column is superfluous, isbn can also be dropped since isbn13 contains it. No missing values but 0 num_pages is really NA, and so is average_rating with 0 ratings_count. The date and isbn columns are chr type.
+
+<br>
+
+### Up to you
+
+Now it's up to you... For this weekend homework there will be no specific tasks, just you and this dataset! Using everything you've learned this week, try to describe/summarise at least 5 things about this dataset - using R and the tidyverse of course! Feel free to find and use new functions if there is something that the tidyverse doesn't offer, but do try to use this homework to apply what you have learned this week. Be prepared to share one of your findings on Monday!
+
+### Remember
+
+Before you submit, go through your weekend homework and make sure your code is following best practices as laid out in the `coding_best_practice` lesson.
+
+<br>
+
+```{r}
+library(tidyverse)
+
+# Read data, clean names, drop redundant columns, change data types
+books <- read_csv("data/books.csv")
+books <- books %>%
+  janitor::clean_names() %>% 
+  select( -rowid, - isbn) %>%
+  mutate(isbn13 = as.numeric(isbn13), publication_date = as.Date(publication_date, "%m/%d/%y"))
+# so the ISBN doesn't display in exponential format
+options(digits = 13)
+
+
+# Efficiency scores the fast way
+efficient_writers <- books %>% 
+  group_by(authors, title) %>% 
+  summarise(pages_written = sum(num_pages),
+            author_av_rating = mean(average_rating),
+            efficiency_score = author_av_rating / pages_written) %>%
+  mutate(pages_written = if_else(pages_written <100, as.numeric(NA), pages_written)) %>% 
+  drop_na(.) %>% 
+  slice_max(efficiency_score)
+```
+
+```{r}
+# A few rows are not actually books, let's filter them out.
+books <- books %>%
+  filter(authors != "NOT A BOOK")
+# Change 0s in num_pages to NAs and in ratings_count to NAs in average rating
+books <- books %>% 
+  mutate(
+    num_pages = na_if(num_pages, 0),
+    average_rating = if_else(ratings_count == 0, as.numeric(NA), average_rating)
+    )
+
+# Finally the language_code for English is ambiguous, let's change that
+books %>%
+  group_by(language_code) %>% 
+  summarise(n = n())
+
+books <- books %>%
+  mutate(language_code = recode(language_code, "en-GB" = "eng",
+                                "en-CA" = "eng",
+                                "en-US" = "eng",
+                                "enm" = "eng"))
+```
+
+```{r}
+# Now for some stats. Let us find the average rating by author. For simplicity's sake let's only consider books in English, by far the largest group in the data.
+books_eng <- books %>% 
+  filter(language_code == "eng")
+
+author_av_rating <- books_eng %>%
+  group_by(authors) %>% 
+  summarise(author_av_rating = mean(average_rating, na.rm = T)) %>% 
+  arrange(desc(author_av_rating))
+
+
+summary(books_eng)
+# It would be interesting to also drop means with a review count of < e.g. 131 (the first Q) or some other significant number
+```
+```{r}
+# Who's the most efficient writer i.e. who's the best rated author, that has written the least amount of pages?
+efficient_writers <- books_eng %>% 
+  group_by(authors) %>% 
+  summarise(pages_written = sum(num_pages, na.rm = T),
+            author_av_rating = mean(average_rating, na.rm = T),
+            efficiency_score = author_av_rating / pages_written)
+
+efficient_writers <- efficient_writers %>% 
+  mutate(pages_written = na_if(pages_written, 0)) %>% 
+  drop_na(.) %>% 
+  arrange(desc(efficiency_score))
+
+# The 10 most efficient authors:
+head(efficient_writers, 10)
+
+summary(efficient_writers)
+```
+
+
