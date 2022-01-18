@@ -111,6 +111,6 @@ summary(lm(price ~ log(carat):cut_ideal, d_cut_dummies))
 ```
 
 ```{r}
-mosaic::plotModel(lm(price ~ log(carat):cut_ideal, d_cut_dummies))
+mosaic::plotModel(lm(price ~ carat + log(carat):cut_ideal, d_cut_dummies))
 ```
 
