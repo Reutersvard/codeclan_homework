@@ -92,7 +92,7 @@ Remove variables that lead to an alias.
 
 ```{r}
 houses <- houses %>% 
-  select(-sqft_basement, -sqft_above)
+  select(-sqft_living)
 ```
 
 ```{r}
@@ -103,6 +103,17 @@ alias(price ~ ., houses)
 # Question 3
 
 Systematically build a regression model containing up to **four** main effects:
+
+# Interlude: do this with automatic model building
+
+```{r}
+summary(regsubsets(price ~ .,
+                                 data = houses,
+                                 nvmax = 6, # max number of predictors
+                                 method = "exhaustive"))
+```
+
+# back to question 3
 
 ```{r, eval=FALSE}
 library(GGally)

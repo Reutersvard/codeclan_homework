@@ -1,0 +1,236 @@
+---
+title: "Avocado price MLR model"
+output: html_notebook
+---
+
+Begin by loading in data. Data publically available from [Kaggle](https://www.kaggle.com/neuromusic/avocado-prices).
+
+```{r include = F}
+library(tidyverse)
+library(lubridate)
+library(leaps)
+```
+
+```{r}
+avocado_raw <- read_csv("data/avocado.csv") %>% janitor::clean_names()
+
+summary(avocado_raw)
+```
+
+<br><br>
+
+### Data preparation
+
+#### Key  observations:
+
+- The index column `x1` can go.
+- `type` should be a factor. 
+- `total_bags` is the sum the amount of small, medium, large and extra large bags sold, plus other avocado varieties.
+- `total_volume` includes all avocados sold, including 4046 (small hass), 4225 (large hass), 4770 (extra large hass) and also others without a separate volume column (e.g. greenskins), so must be kept.
+- `year` should be a factor.
+- `region` is categorical and should be a factor. Leads to too many dummy variables and has a `TotalUS` value, worth having two separate data-sets, one with and one without regions..
+- Data is gathered weekly, so `Date` does not include daily information, but weekly information.
+
+
+```{r}
+# Clean df according to observations
+avocado <- avocado_raw %>% 
+  mutate(week = factor(if_else(week(date) %% 4 == 0, 4, week(date) %% 4)),
+         month = factor(month(date)),
+         year = factor(year),
+         type = factor(type),
+         region = factor(region)) %>% 
+  select(average_price, total_volume, x4046, x4225, x4770,total_bags,
+         small_bags, large_bags, x_large_bags, type, region, year, month, week) %>% 
+  rename("small_volume" = "x4046",
+         "large_volume" = "x4225",
+         "x_large_volume" = "x4770")
+
+avocado_regions <- avocado %>% 
+  filter(region != "TotalUS")
+
+avocado <- avocado %>% 
+  filter(region == "TotalUS") %>% 
+  select(-region)
+```
+
+No variables depend linearly on others:
+```{r}
+alias(lm(average_price ~ ., avocado_regions))
+```
+
+<br><br>
+
+### Exploratory model building
+
+Let us centre on the nationwide data first. Visualise the distribution of the average price:
+
+```{r}
+avocado %>%
+  # filter(type == "organic") %>% 
+  ggplot(aes(average_price)) +
+  geom_histogram(bins = 35) +
+  geom_vline(xintercept = mean(avocado$average_price))
+```
+
+Data seems bimodal, with one average for conventional and another one for organic avocados. Quick look at the over-fitted model:
+
+```{r}
+summary(lm(average_price ~ ., avocado))
+```
+
+
+```{r}
+model_regsubsets <- regsubsets(average_price ~ ., avocado, nvmax = 10)
+
+summary(model_regsubsets)
+```
+
+Key predictors nationwide seem to be the volume of large hass avocados sold, the year and the month. When using nationwide data, there likely are not enough observations to split the sample into train and test sets. Instead, in order to compare models, indicators that penalise over-fitting should be preferred. These indicators are adjusted $R^2$ and BIC.
+
+
+```{r}
+plot(model_regsubsets, scale = "adjr2")
+```
+
+Plot shows what variables are included for different values of adjusted $R^2$. The highest performing model includes volume of large avocados, all bag sizes, the year 2017 and the months of September and October.
+
+```{r}
+plot(model_regsubsets, scale = "bic")
+```
+
+Values on the y axis are not the absolute BIC values, but rather the change in BIC relative to the BIC for the intercept only model. By this indicator, the best model includes volume of large avocados, the year 2017 and the months of September and October.
+
+```{r}
+plot(summary(model_regsubsets)$bic, type = "b")
+```
+
+```{r}
+plot(summary(model_regsubsets)$rsq, type = "b")
+```
+
+These two plots show that, in terms of model fitness, a model of more than 4 variables has diminishing returns, with perhaps another turning point after more than 7. Optimally, we would want our model to have either 4 or 8 variables to avoid diminishing returns in the parsimony vs. explanatory power trade-off.
+
+Note that not all categories in `year` and `month` seem statistically significant. Let us compare how the models with and without them do via analysis of variance:
+
+```{r}
+anova(lm(average_price ~ large_volume + month, avocado), lm(average_price ~ large_volume, avocado))
+```
+
+```{r}
+anova(lm(average_price ~ large_volume + year + month, avocado), lm(average_price ~ large_volume + year, avocado))
+```
+
+It seems that both categories are statistically significant.
+
+```{r}
+explanatory_model <- lm(average_price ~ large_volume + year + month, avocado)
+
+summary(explanatory_model)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(explanatory_model)
+```
+
+The final explanatory model describes approximately 82% of the variance in average price in the data. Diagnostic plots show some heteroscedascity for lower average price values.
+
+Assuming that what models nationwide data will model the data grouped by region, let us now build the model with the inclusion of regional data.
+
+```{r}
+anova(lm(average_price ~ large_volume + year + month, avocado_regions), lm(average_price ~ large_volume + year + month + region, avocado_regions))
+```
+
+It seems that regional factors are statistically significant.
+
+```{r}
+model_regsubsets <- regsubsets(average_price ~ ., select(avocado_regions, -region), nvmax = 10)
+
+summary(model_regsubsets)
+```
+
+It also seems that for the regional data, the model cannot be the same as for the nationwide data. Given that the value `TotalUS` in the `region` column seems misleading, let us go back to data preparation and nation-wide model building.
+
+### New model using `caret`.
+
+#### Data preparation
+
+```{r}
+# Clean df according to observations, getting rid of "TotalUS" rows and "region" column
+avocado <- avocado_raw %>% 
+  mutate(week = factor(if_else(week(date) %% 4 == 0, 4, week(date) %% 4)),
+         month = factor(month(date)),
+         year = factor(year),
+         type = factor(type),
+         region = factor(region)) %>% 
+  select(average_price, total_volume, x4046, x4225, x4770,total_bags,
+         small_bags, large_bags, x_large_bags, type, region, year, month, week) %>% 
+  rename("small_volume" = "x4046",
+         "large_volume" = "x4225",
+         "x_large_volume" = "x4770") %>% 
+  filter(region != "TotalUS") %>% 
+  select(-region)
+```
+
+```{r}
+library(caret)
+```
+
+```{r}
+avocado %>% 
+  ggplot(aes(average_price)) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = mean(avocado$average_price))
+```
+
+Create test and train sets
+```{r}
+train_index <- createDataPartition(avocado$average_price, p = 0.8, list = FALSE, times = 1)
+
+train <- avocado[train_index, ]
+test <- avocado[-train_index, ]
+```
+
+
+Create model
+```{r}
+model_regsubsets <- regsubsets(average_price ~ ., train, nvmax = 10)
+
+summary(model_regsubsets)
+```
+
+```{r}
+plot(model_regsubsets, scale = "adjr2")
+```
+
+```{r}
+plot(summary(model_regsubsets)$bic, type = "b")
+```
+
+```{r}
+plot(summary(model_regsubsets)$rsq, type = "b")
+```
+
+There seems to be no significant turning point. Thus, comparing the BIC and adjusted $R^2$ criteria, let us conclude that the explanatory model:
+
+```{r}
+explanatory_model <- lm(average_price ~ type + small_volume + year + month, train)
+
+summary(explanatory_model)
+```
+
+Test this model:
+
+```{r}
+predictions_test <- test %>%
+  modelr::add_predictions(explanatory_model) %>%
+  select(average_price, pred)
+```
+
+The mean squared error:
+
+```{r}
+mean((predictions_test$pred - test$average_price)**2)
+```
+
