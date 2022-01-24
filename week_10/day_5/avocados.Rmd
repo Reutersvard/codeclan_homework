@@ -234,3 +234,17 @@ The mean squared error:
 mean((predictions_test$pred - test$average_price)**2)
 ```
 
+Double check the value for the train set:
+
+```{r}
+predictions_train <- train %>%
+  modelr::add_predictions(explanatory_model) %>%
+  select(average_price, pred)
+```
+
+```{r}
+mean((predictions_train$pred - train$average_price)**2)
+```
+
+
+Error is lower on the train set, indicating that the model is well-fit. 
