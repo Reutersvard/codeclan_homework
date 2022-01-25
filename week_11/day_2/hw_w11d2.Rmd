@@ -1,0 +1,96 @@
+---
+title: "w11d2 homework"
+output: html_notebook
+---
+
+## Decision trees
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(tidyverse)
+library(caret)
+
+titanic_set <- read_csv('data/titanic_decision_tree_data.csv')
+
+shuffle_index <- sample(1:nrow(titanic_set))
+
+# shuffle the data so class order isn't in order - need this for training/testing split later on
+titanic_set <- titanic_set[shuffle_index, ]
+```
+
+```{r}
+titanic <- titanic_set %>% 
+  drop_na() %>% 
+  mutate(sex = factor(sex),
+         survived = factor(survived),
+         age = factor(if_else(age <= 16, "child", "adult")),
+         class = as.factor(pclass),
+         embarked = factor(embarked)) %>% 
+  select(sex, age, class, embarked, sib_sp, parch, survived)
+
+summary(titanic)
+```
+
+```{r}
+# being female, being a child, and being second class seem to make it more likely to survive
+
+ggplot(titanic) +
+  geom_jitter(aes(survived, sex))
+
+ggplot(titanic) +
+  geom_jitter(aes(survived, age))
+
+ggplot(titanic) +
+  geom_jitter(aes(survived, class)) 
+
+ggplot(titanic) +
+  geom_jitter(aes(survived, parch)) 
+```
+
+```{r}
+GGally::ggpairs(titanic)
+```
+
+```{r}
+# create a test sample index
+test_index <- sample(1:nrow(titanic), size = nrow(titanic)*0.2)
+
+# create test set
+titanic_test  <- slice(titanic, test_index)
+
+# create training set
+titanic_train <- slice(titanic, -test_index)
+```
+
+```{r}
+# Check that train and test are consistent in their proportions of survived passengers
+titanic_test %>% 
+  janitor::tabyl(survived)
+
+titanic_train %>%
+  janitor::tabyl(survived)
+```
+
+```{r}
+model_titanic <- rpart(
+  formula = survived ~ ., 
+  data = titanic_train, 
+  method = 'class'
+)
+
+rpart.plot(model_titanic,
+           yesno = 2,
+           digits = 3)
+```
+
+```{r}
+library(modelr)
+# Add predictions and create confusion matrix
+titanic_pred <- titanic_test %>%
+  add_predictions(model_titanic, type = 'class')
+
+confusionMatrix(titanic_pred$pred, titanic_pred$survived)
+```
+
+The model is pretty bad, but there isn't enough data
