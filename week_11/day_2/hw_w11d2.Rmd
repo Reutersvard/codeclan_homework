@@ -21,13 +21,13 @@ titanic_set <- titanic_set[shuffle_index, ]
 
 ```{r}
 titanic <- titanic_set %>% 
-  drop_na() %>% 
   mutate(sex = factor(sex),
-         survived = factor(survived),
+         survived = factor(if_else(survived == 1, "Yes", "No")),
          age = factor(if_else(age <= 16, "child", "adult")),
          class = as.factor(pclass),
          embarked = factor(embarked)) %>% 
-  select(sex, age, class, embarked, sib_sp, parch, survived)
+  select(sex, age, class, embarked, sib_sp, parch, survived) %>% 
+  drop_na()
 
 summary(titanic)
 ```
@@ -79,9 +79,7 @@ model_titanic <- rpart(
   method = 'class'
 )
 
-rpart.plot(model_titanic,
-           yesno = 2,
-           digits = 3)
+rpart.plot(model_titanic, type = 4)
 ```
 
 ```{r}
@@ -93,4 +91,4 @@ titanic_pred <- titanic_test %>%
 confusionMatrix(titanic_pred$pred, titanic_pred$survived)
 ```
 
-The model is pretty bad, but there isn't enough data
+The model is decent, considering it only has 706 data points. Specificity not that great.
