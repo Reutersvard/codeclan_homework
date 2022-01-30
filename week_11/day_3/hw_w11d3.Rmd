@@ -1,0 +1,31 @@
+---
+title: "w11d3 Homework"
+output: html_notebook
+---
+```{r include = F}
+library(tidyverse)
+```
+
+```{r}
+customers <- read_csv("data/mall_customers.csv") %>%
+                janitor::clean_names()
+
+summary(customers)
+```
+
+```{r}
+ggplot(customers, aes(x = annual_income_k, y = spending_score_1_100)) +
+  geom_point()
+```
+
+```{r}
+ggplot(customers, aes(x = gender, y = spending_score_1_100)) +
+  geom_jitter()
+```
+
+```{r}
+ggplot(customers, aes(x = age, y = spending_score_1_100)) +
+  geom_point()
+```
+
+There seem to be clusters by ages, 
